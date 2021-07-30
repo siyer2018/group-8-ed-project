@@ -6,6 +6,7 @@ from botocore.exceptions import NoCredentialsError
 
 CSV_NAME: str = 'data.csv'
 CSV_HEADER: list[str] = ['DATA','EXPERIENCE']
+KEY_FILE: str = 'keys.txt'
 MAXIMUM_DIMENSION: int = 200
 EXP_DURATION: int = 30
 EXP_NAME: str = 'ball_go_zoom'
@@ -43,11 +44,12 @@ def getKeys()->tuple:
     """
     Get keys from keys.txt
     """
-    #Read your own keys from keys.txt and define below
-    #ACCESS_KEY=
-    #SECRET_KEY=
-    return#(ACCESS_KEY,SECRET_KEY)
+    f=open(KEY_FILE)
+    access = f.readline().split('=')[1].strip()
+    secret = f.readline().split('=')[1].strip()
 
+    return access,secret
+   
 def initializeRun()->None:
     """
     Run all starting functions
