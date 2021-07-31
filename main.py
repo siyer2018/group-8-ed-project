@@ -11,33 +11,41 @@ MAXIMUM_DIMENSION: int = 200
 EXP_DURATION: int = 30
 EXP_NAME: str = 'ball_go_zoom'
 EXP_TYPE: str = '2D' #TYPE = 'AR' or '2D' or 'RL'
-
-def generateFakeData(lengthOfList:int=EXP_DURATION)->list:
-    """
-    Returns list of length=lengthOfList with random ints (x,y) at each index
-    """
-    fakeData=[]
-    for index in range(lengthOfList):
-        fakeData.append(xyTuple=(random.randint(0,MAXIMUM_DIMENSION),random.randint(0,MAXIMUM_DIMENSION)))
-    return fakeData
+AR_BUCKET: str
+TWOD_BUCKET: str
+RL_BUCKET: str
+TEST_BUCKET = 'apuentebuckettest'
 
 def createFakeCSV()->None:
     """
     Create CSV file or replace existing csv
     Use for generating a fake csv file
     """
-    if os.path.exists(CSV_NAME):
-        os.remove(CSV_NAME)
+    def generateFakeData(lengthOfList:int=EXP_DURATION)->list[int]:
+        """
+        Returns list of length=lengthOfList with random ints (x,y) at each index
+        """
+        fakeData=[]
+        for index in range(lengthOfList):
+            fakeData.append((random.randint(0,MAXIMUM_DIMENSION),random.randint(0,MAXIMUM_DIMENSION)))
+        return fakeData
+    
+    if os.path.exists(CSV_NAME): os.remove(CSV_NAME)
+    CSV_filler: list[str] = [
+        str(generateFakeData()).strip('[]'),
+        EXP_NAME
+    ]
     with open(CSV_NAME,'w') as data:
         writer=csv.writer(data)
         writer.writerow(CSV_HEADER)
-        writer.writerow(generateFakeData(),EXP_TYPE,EXP_NAME)
+        writer.writerow(CSV_filler)#writes to row[2], not row[1]? fix!
     return
 
 def readData()->None:
     """
     Read data from Unity CSV
     """
+    if os.path.exists(CSV_NAME): os.remove(CSV_NAME)
     return
 
 def getKeys()->tuple:
@@ -47,18 +55,10 @@ def getKeys()->tuple:
     f=open(KEY_FILE)
     access = f.readline().split('=')[1].strip()
     secret = f.readline().split('=')[1].strip()
-
     return access,secret
-   
-def initializeRun()->None:
-    """
-    Run all starting functions
-    """
-    createFakeCSV()
-    ACCESS_KEY,SECRET_KEY = getKeys()
-    return
 
 def upload_to_aws(local_file, bucket, s3_file)->bool:
+    ACCESS_KEY,SECRET_KEY = getKeys()
     s3 = boto3.client('s3', aws_access_key_id=ACCESS_KEY,
                       aws_secret_access_key=SECRET_KEY)
     try:
@@ -72,5 +72,5 @@ def upload_to_aws(local_file, bucket, s3_file)->bool:
         print("Credentials not available")
         return False
 
-#initializeRun()
-#upload_to_aws('local_file', 'bucket_name', 's3_file_name')
+createFakeCSV()
+#upload_to_aws(CSV_NAME,TEST_BUCKET,CSV_NAME)
