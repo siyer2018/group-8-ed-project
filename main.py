@@ -1,6 +1,7 @@
 import random
 import csv
 import boto3
+import pandas as pd
 import os
 from botocore.exceptions import NoCredentialsError
 
