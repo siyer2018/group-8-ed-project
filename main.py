@@ -11,6 +11,7 @@ EXP_NAME: str = 'ball_go_zoom'
 EXP_TYPE: str = '2D' #TYPE = 'AR' or '2D' or 'RL'
 OFFICIAL_BUCKET: str = 'ed1-eye-tracker'
 TEST_BUCKET: str = 'apuentebuckettest'
+PROCESS_CSV: str = "In_Process_Data.csv"
 
 def findCSV()->str:
     """
@@ -44,27 +45,42 @@ def createFakeCSV()->None:
     pd.DataFrame(data).to_csv(CSV_NAME,index=False)
     return
 
-
-
 def readData()->None:
     """
-    Read data from Unity CSV
+    Read data from Unity CSV, process, and store
     """
     df = pd.read_csv(CSV_PATH)
-    df = df['EXPERIENCE'] = EXP_NAME*df.shape(0)
+    df=df[['Index','Fixation Point X','Fixation Point Y']]
+    df['EXP_TYPE']='2D'
+    df1=pd.DataFrame(df).copy()
+    df1['EXP_TYPE']='AR'
+    df=pd.concat([df,df1])
+    print(df)
+    pd.DataFrame(df).to_csv(PROCESS_CSV,index=False)
     return
 
+# def readData()->None:
+#     """
+#     Read data from Unity CSV, process, and store
+#     """
+#     df = pd.read_csv(CSV_PATH, header=None)
+#     df=df.drop(0)
+#     data = {'DATA':[df,df],
+#             'EXP_TYPE':['2D','AR']}
+#     df=pd.DataFrame(data)
+#     pd.DataFrame(df).to_csv(PROCESS_CSV,index=False)
+#     return
 
-def upload_to_aws(local_file, bucket, s3_file)->bool:
+def upload_to_aws(local_file, bucket)->bool:
     f=open(KEY_FILE)
     ACCESS_KEY = f.readline().split('=')[1].strip()
     SECRET_KEY = f.readline().split('=')[1].strip()
     s3 = boto3.client('s3', aws_access_key_id=ACCESS_KEY,
                       aws_secret_access_key=SECRET_KEY)
     try:
-        s3.upload_file(local_file, bucket, s3_file)
+        s3.upload_file(local_file, bucket, "Processed_Eye_Data.csv")
         print("Upload Successful")
-        os.remove(CSV_NAME)
+        #os.remove(CSV_NAME)
         return True
     except FileNotFoundError:
         print("The file was not found")
@@ -73,8 +89,8 @@ def upload_to_aws(local_file, bucket, s3_file)->bool:
         print("Credentials not available")
         return False
 
-createFakeCSV()
-upload_to_aws(CSV_NAME,TEST_BUCKET,CSV_NAME)
+readData()
+upload_to_aws(PROCESS_CSV,TEST_BUCKET)
 
 
 
