@@ -24,6 +24,8 @@ def findCSV()->str:
     return None,'data.csv'
 CSV_PATH, CSV_NAME = findCSV()
 
+#Multiline commented: NOT BEING USED
+'''
 def createFakeCSV()->None:
     """
     Create CSV file or replace existing csv
@@ -44,6 +46,7 @@ def createFakeCSV()->None:
     }
     pd.DataFrame(data).to_csv(CSV_NAME,index=False)
     return
+'''
 
 def readData()->None:
     """
@@ -59,6 +62,7 @@ def readData()->None:
     pd.DataFrame(df).to_csv(PROCESS_CSV,index=False)
     return
 
+'''In progress'''
 # def readData()->None:
 #     """
 #     Read data from Unity CSV, process, and store
