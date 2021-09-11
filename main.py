@@ -22,6 +22,15 @@ def stripAndCombine(frame:DataFrame, columnName:str,headers:list[str])->DataFram
     frame=frame.drop(headers, axis=1)
     return frame
 
+def readCell(cell:str,confidence:bool)->list[str]:
+    """
+    Returns list of integers from cell string; if confidence==true, drops last element
+    """
+    values = cell.split("'")
+    if confidence: values.pop()
+    values = list(map(int, values))
+    return values
+
 def readData()->None:
     """
     Read data from Unity CSV, process, and store
@@ -41,6 +50,19 @@ def readData()->None:
     fullData=[{"Data": df.to_csv(index=False), "Date": exp_date, "Exp Name": EXP_NAME}]
     df=pd.DataFrame(fullData)
     pd.DataFrame(df).to_csv(PROCESS_CSV,index=False,sep=';')
+    return
+
+
+def getFixations(fileName:str)->None: #WIP
+    df = pd.read_csv("Test.csv", dtype=str)
+    fixDf = pd.DataFrame(columns=["Date","Start Time","End Time","Duration","Fix Avg X","Fix Avg Y"])
+    prevX,prevY=None,None
+    for index in df.index:
+        fixPoints = readCell(df["Fixation Point"][index],True)
+        x = fixPoints[0]; y = fixPoints[1]
+        if (prevX == None) and (prevY == None): prevX = x; prevY = y; pass
+        
+
     return
 
 def openFullCSV():
@@ -66,7 +88,7 @@ def upload_to_aws(local_file, bucket)->bool:
         print("Credentials not available")
         return False
 
-readData()
-upload_to_aws(PROCESS_CSV,TEST_BUCKET)
+#readData()
+#upload_to_aws(PROCESS_CSV,TEST_BUCKET)
 #openFullCSV()
 
