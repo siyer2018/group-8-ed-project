@@ -56,8 +56,6 @@ def readData()->None:
 def getFixations(fileName:str)->None:
     df = pd.read_csv(fileName, dtype=str)
     fixDf = pd.DataFrame(columns=["Date","Start Time","End Time","Duration","Fix Avg X","Fix Avg Y"])
-    prevX=None
-    prevY=None
     startTime=None
     xList:list[float]=[]
     yList:list[float]=[]
@@ -68,11 +66,11 @@ def getFixations(fileName:str)->None:
         xList.append(x)
         yList.append(y)
         if row[1].equals(df.iloc[0]): #initial row
-            prevX = x
-            prevY = y
             startTime = row[1]["Index"]
         if (x < mean(xList)-FIXATION_OFFSET) or (x > mean(xList)+FIXATION_OFFSET) or (y <mean(yList)-FIXATION_OFFSET) or (y > mean(yList)+FIXATION_OFFSET):
             # append prev row
+            xList.pop()
+            yList.pop()
             fixDf = fixDf.append({
                 "Date":"7/31/2021",
                 "Start Time":startTime,
@@ -81,14 +79,11 @@ def getFixations(fileName:str)->None:
                 "Fix Avg X":mean(xList),
                 "Fix Avg Y":mean(yList)},ignore_index=True)
             # create new row
-            prevX = x
-            prevY = y
             xList.clear()
             xList.append(x)
             yList.clear()
             yList.append(y)
             startTime = row[1]["Index"]
-        # if row[1]["Index"] == df.iloc[-1]["Index"]: #last row
         if row[1].equals(df.iloc[-1]): #last row
             fixDf = fixDf.append({
                 "Date":"7/31/2021",
@@ -128,8 +123,3 @@ def upload_to_aws(local_file, bucket)->bool:
 #upload_to_aws(PROCESS_CSV,TEST_BUCKET)
 #openFullCSV()
 getFixations("Test.csv")
-
-
-# df = pd.read_csv("Test.csv", dtype=str)
-# for row in df.iterrows():
-#     print(type(row[1]))
