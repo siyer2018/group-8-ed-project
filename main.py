@@ -1,5 +1,6 @@
 import boto3
 import pandas as pd
+from numpy import mean
 from botocore.exceptions import NoCredentialsError
 from pandas.core.frame import DataFrame
 from io import StringIO
@@ -12,6 +13,7 @@ EXP_TYPE: str = '2D' #TYPE = 'AR' or '2D' or 'RL'
 OFFICIAL_BUCKET: str = 'ed1-eye-tracker'
 TEST_BUCKET: str = 'apuentebuckettest'
 PROCESS_CSV: str = "Process_Data.csv"
+FIXATION_OFFSET: float = 0.1
 
 def stripAndCombine(frame:DataFrame, columnName:str,headers:list[str])->DataFrame:
     for header in headers:
@@ -22,13 +24,12 @@ def stripAndCombine(frame:DataFrame, columnName:str,headers:list[str])->DataFram
     frame=frame.drop(headers, axis=1)
     return frame
 
-def readCell(cell:str,confidence:bool)->list[str]:
+def readCell(cell:str)->list[str]:
     """
-    Returns list of integers from cell string; if confidence==true, drops last element
+    Returns list of integers from cell string
     """
     values = cell.split("'")
-    if confidence: values.pop()
-    values = list(map(int, values))
+    values = list(map(float, values))
     return values
 
 def readData()->None:
@@ -52,17 +53,52 @@ def readData()->None:
     pd.DataFrame(df).to_csv(PROCESS_CSV,index=False,sep=';')
     return
 
-
-def getFixations(fileName:str)->None: #WIP
-    df = pd.read_csv("Test.csv", dtype=str)
+def getFixations(fileName:str)->None:
+    df = pd.read_csv(fileName, dtype=str)
     fixDf = pd.DataFrame(columns=["Date","Start Time","End Time","Duration","Fix Avg X","Fix Avg Y"])
-    prevX,prevY=None,None
-    for index in df.index:
-        fixPoints = readCell(df["Fixation Point"][index],True)
-        x = fixPoints[0]; y = fixPoints[1]
-        if (prevX == None) and (prevY == None): prevX = x; prevY = y; pass
-        
-
+    prevX=None
+    prevY=None
+    startTime=None
+    xList:list[float]=[]
+    yList:list[float]=[]
+    for row in df.iterrows():
+        fixPoints = readCell(row[1]["Fixation Point"])
+        x = fixPoints[0]
+        y = fixPoints[1]
+        xList.append(x)
+        yList.append(y)
+        if row[1].equals(df.iloc[0]): #initial row
+            prevX = x
+            prevY = y
+            startTime = row[1]["Index"]
+        if (x < mean(xList)-FIXATION_OFFSET) or (x > mean(xList)+FIXATION_OFFSET) or (y <mean(yList)-FIXATION_OFFSET) or (y > mean(yList)+FIXATION_OFFSET):
+            # append prev row
+            fixDf = fixDf.append({
+                "Date":"7/31/2021",
+                "Start Time":startTime,
+                "End Time":row[1]["Index"],
+                "Duration":str(int(row[1]["Index"])-int(startTime)),
+                "Fix Avg X":mean(xList),
+                "Fix Avg Y":mean(yList)},ignore_index=True)
+            # create new row
+            prevX = x
+            prevY = y
+            xList.clear()
+            xList.append(x)
+            yList.clear()
+            yList.append(y)
+            startTime = row[1]["Index"]
+        # if row[1]["Index"] == df.iloc[-1]["Index"]: #last row
+        if row[1].equals(df.iloc[-1]): #last row
+            fixDf = fixDf.append({
+                "Date":"7/31/2021",
+                "Start Time":startTime,
+                "End Time":row[1]["Index"],
+                "Duration":str(int(row[1]["Index"])-int(startTime)+1),
+                "Fix Avg X":mean(xList),
+                "Fix Avg Y":mean(yList)},ignore_index=True)
+            break
+    fixDf.to_csv("Fixation_Points.csv",index=True,sep=',')
     return
 
 def openFullCSV():
@@ -91,4 +127,9 @@ def upload_to_aws(local_file, bucket)->bool:
 #readData()
 #upload_to_aws(PROCESS_CSV,TEST_BUCKET)
 #openFullCSV()
+getFixations("Test.csv")
 
+
+# df = pd.read_csv("Test.csv", dtype=str)
+# for row in df.iterrows():
+#     print(type(row[1]))
