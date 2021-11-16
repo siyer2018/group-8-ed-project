@@ -1,28 +1,30 @@
 import boto3
+import json
+import urllib.parse
 import pandas as pd
 from numpy import mean
 from botocore.exceptions import NoCredentialsError
 from pandas.core.frame import DataFrame
 from io import StringIO
 
-CSV_HEADER: list[str] = ['DATA','EXPERIENCE']
 KEY_FILE: str = 'keys.txt'
-EXP_DURATION: int = 30
-EXP_NAME: str = 'ball_go_zoom'
-EXP_TYPE: str = '2D' #TYPE = 'AR' or '2D' or 'RL'
-OFFICIAL_BUCKET: str = 'ed1-eye-tracker'
-TEST_BUCKET: str = 'apuentebuckettest'
-PROCESS_CSV: str = "Process_Data.csv"
-FIXATION_OFFSET: float = 0.1
+EXP_NAME: str = 'ball_go_zoom' #replace with filename detection
+EXP_TYPE: str = '2D' #TYPE = 'AR' or '2D' or 'RL' #replace with filename detection
+OFFICIAL_BUCKET: str = 'output-data-processing'
+OUTER_CSV: str = "Outer_Data.csv"
+CELL_CSV: str = "Data_Cell.csv" #replace with filename detection
+FIXATION_CSV: str = "Fixation_Points.csv" #replace with filename detection
+FIXATION_OFFSET: float = 0.2
+s3 = boto3.client('s3')
 
-def stripAndCombine(frame:DataFrame, columnName:str,headers:list[str])->DataFrame:
-    for header in headers:
-        frame[header]=frame[header].str.replace('(','', regex=False)
-        frame[header]=frame[header].str.replace(')','', regex=False)
-        frame[header]=frame[header].str.replace(' ','', regex=False)
-    frame[columnName]=frame[headers].agg("'".join,axis=1)
-    frame=frame.drop(headers, axis=1)
-    return frame
+def key_split(key:str)->tuple[str,str]:
+    """
+    Returns a tuple containing experience type and experience name
+    """
+    exp_type: str
+    exp_name: str
+    #split key into type and name
+    return exp_type, exp_name
 
 def readCell(cell:str)->list[str]:
     """
@@ -32,30 +34,34 @@ def readCell(cell:str)->list[str]:
     values = list(map(float, values))
     return values
 
-def readData()->None:
+def readData(download_path:str, upload_path:str=None)->None:
     """
     Read data from Unity CSV, process, and store
     """
-    df = pd.read_csv("Raw_Eye_Data.csv", dtype=str)
+    def stripAndCombine(frame:DataFrame, columnName:str,headers:list[str])->DataFrame:
+        for header in headers:
+            frame[header]=frame[header].str.replace('(','', regex=False)
+            frame[header]=frame[header].str.replace(')','', regex=False)
+            frame[header]=frame[header].str.replace(' ','', regex=False)
+        frame[columnName]=frame[headers].agg("'".join,axis=1)
+        frame=frame.drop(headers, axis=1)
+        return frame
+    df = pd.read_csv(download_path, dtype=str)
     exp_date=df["Date and Time"][0][:10]
     df=df.drop("Date and Time", axis=1)
     df=stripAndCombine(df, "Fixation Point", ["Fixation Point X", "Fixation Point Y", "Fixation Point Z", "Confidence"])
-    df=stripAndCombine(df, "Left Forward Gaze", ["Left Foward Gaze X", "Left Foward Gaze Y", "Left Foward Gaze Z"])
-    df=stripAndCombine(df, "Right Forward Gaze", ["Right Forward Gaze X", "Right Forward Gaze Y", "Right Forward Gaze Z"])
-    df=stripAndCombine(df, "Left Center Gaze", ["Left Center X", "Left Center Y", "Left Center Z", "Left Center Confidence"])
-    df=stripAndCombine(df, "Right Center Gaze", ["Right Center X", "Right Center Y", "Right Center Z", "Right Center Confidence"])
-    df=stripAndCombine(df, "Left Gaze WXYZ", ["Left Gaze W", "Left Gaze X", "Left Gaze Y", "Left Gaze Z"])
-    df=stripAndCombine(df, "Right Gaze WXYZ", ["Right Gaze W", "Right Gaze X", "Right Gaze Y", "Right Gaze Z"])
     df=stripAndCombine(df, "Left + Right Blink", ["Left Blink", "Right Blink"])
-    pd.DataFrame(df).to_csv("Test.csv",index=False)
-    fullData=[{"Data": df.to_csv(index=False), "Date": exp_date, "Exp Name": EXP_NAME}]
+    df=df[["Index","Fixation Point","Left + Right Blink"]]
+    #filter out left+right blink true values using readCell function
+    pd.DataFrame(df).to_csv(CELL_CSV,index=False)
+    fullData=[{"Data": df.to_csv(index=False,header=False), "Date": exp_date, "Exp Name": EXP_NAME}]
     df=pd.DataFrame(fullData)
-    pd.DataFrame(df).to_csv(PROCESS_CSV,index=False,sep=';')
+    pd.DataFrame(df).to_csv(OUTER_CSV, index=False, sep=';')
     return
 
-def getFixations(fileName:str)->None:
+def getFixations(fileName:str, upload_path:str=None)->None:
     df = pd.read_csv(fileName, dtype=str)
-    fixDf = pd.DataFrame(columns=["Date","Start Time","End Time","Duration","Fix Avg X","Fix Avg Y"])
+    fixDf = pd.DataFrame(columns=["Start Time","End Time","Duration","Fix Avg X","Fix Avg Y"])
     startTime=None
     xList:list[float]=[]
     yList:list[float]=[]
@@ -72,7 +78,6 @@ def getFixations(fileName:str)->None:
             xList.pop()
             yList.pop()
             fixDf = fixDf.append({
-                "Date":"7/31/2021",
                 "Start Time":startTime,
                 "End Time":row[1]["Index"],
                 "Duration":str(int(row[1]["Index"])-int(startTime)),
@@ -86,21 +91,28 @@ def getFixations(fileName:str)->None:
             startTime = row[1]["Index"]
         if row[1].equals(df.iloc[-1]): #last row
             fixDf = fixDf.append({
-                "Date":"7/31/2021",
                 "Start Time":startTime,
                 "End Time":row[1]["Index"],
                 "Duration":str(int(row[1]["Index"])-int(startTime)+1),
                 "Fix Avg X":mean(xList),
                 "Fix Avg Y":mean(yList)},ignore_index=True)
             break
-    fixDf.to_csv("Fixation_Points.csv",index=True,sep=',')
+    #filter >1 and <-1 x and y values
+    fixDf = fixDf.loc[fixDf["Fix Avg X"] >= -1]
+    fixDf = fixDf.loc[fixDf["Fix Avg X"] <= 1]
+    fixDf = fixDf.loc[fixDf["Fix Avg Y"] >= -1]
+    fixDf = fixDf.loc[fixDf["Fix Avg Y"] <= 1]
+    pd.DataFrame(fixDf).to_csv(FIXATION_CSV, sep=',')
     return
 
 def openFullCSV():
-    df=pd.read_csv(PROCESS_CSV, dtype=str)
+    """
+    Creates a a csv file from the data cell of a broader csv file
+    """
+    df=pd.read_csv(OUTER_CSV, dtype=str)
     TESTDATA=StringIO(df.iloc[0,0])
     df=pd.read_csv(TESTDATA)
-    pd.DataFrame(df).to_csv("Test.csv",index=False)
+    pd.DataFrame(df).to_csv(CELL_CSV,index=False)
 
 def upload_to_aws(local_file, bucket)->bool:
     f=open(KEY_FILE)
@@ -119,7 +131,7 @@ def upload_to_aws(local_file, bucket)->bool:
         print("Credentials not available")
         return False
 
-#readData()
-#upload_to_aws(PROCESS_CSV,TEST_BUCKET)
+readData("1st_Quad.csv")
+#upload_to_aws(OUTER_CSV,OFFICIAL_BUCKET)
 #openFullCSV()
-getFixations("Test.csv")
+getFixations(CELL_CSV)
