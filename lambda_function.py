@@ -21,8 +21,7 @@ def lambda_handler(event, context):
     upload_path = '/tmp/processed-{}'.format(key)
     s3.download_file(bucket, key, download_path)
 
-    processorFunctions.readData(download_path, upload_path)
-    processorFunctions.getFixations(download_path, upload_path)
+    processorFunctions.updateBucket(download_path, upload_path)
 
     s3.upload_file(upload_path, OUTPUT_BUCKET, key)
     #clear bucket

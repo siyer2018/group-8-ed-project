@@ -26,6 +26,16 @@ def key_split(key:str)->tuple[str,str]:
     #split key into type and name
     return exp_type, exp_name
 
+def updateBucket(download_path:str, upload_path:str)->None:
+    """
+    Calls relevant functions. Used for key in global scope
+    """
+    keyDetail: tuple[str, str] = key_split()#slice download_path
+    readData(download_path, upload_path)
+    getFixations(download_path, upload_path)
+    return
+
+
 def readCell(cell:str)->list[str]:
     """
     Returns list of integers from cell string
