@@ -17,20 +17,23 @@ FIXATION_CSV: str = "Fixation_Points.csv" #replace with filename detection
 FIXATION_OFFSET: float = 0.2
 s3 = boto3.client('s3')
 
-def key_split(key:str)->tuple[str,str]:
+def key_split(download_path:str)->tuple[str,str]:
     """
     Returns a tuple containing experience type and experience name
     """
-    exp_type: str
-    exp_name: str
+
     #split key into type and name
+    split_key: str = download_path.split("/")[-1]
+    split_key_list: list[str] = split_key.split("_")
+    exp_type: str = split_key_list[0]
+    exp_name: str = split_key_list[-1]
     return exp_type, exp_name
 
 def updateBucket(download_path:str, upload_path:str)->None:
     """
     Calls relevant functions. Used for key in global scope
     """
-    keyDetail: tuple[str, str] = key_split()#slice download_path
+    keyDetail: tuple[str, str] = key_split(download_path)#slice download_path
     readData(download_path, upload_path)
     getFixations(download_path, upload_path)
     return
@@ -59,10 +62,12 @@ def readData(download_path:str, upload_path:str=None)->None:
     df = pd.read_csv(download_path, dtype=str)
     exp_date=df["Date and Time"][0][:10]
     df=df.drop("Date and Time", axis=1)
+    df = df.loc[df["Left Blink"] == False]
+    df = df.loc[df["Right Blink"] == False]
+    df = df.loc[df["Confidence"] >= 0.75]
     df=stripAndCombine(df, "Fixation Point", ["Fixation Point X", "Fixation Point Y", "Fixation Point Z", "Confidence"])
     df=stripAndCombine(df, "Left + Right Blink", ["Left Blink", "Right Blink"])
     df=df[["Index","Fixation Point","Left + Right Blink"]]
-    #filter out left+right blink true values using readCell function
     pd.DataFrame(df).to_csv(CELL_CSV,index=False)
     fullData=[{"Data": df.to_csv(index=False,header=False), "Date": exp_date, "Exp Name": EXP_NAME}]
     df=pd.DataFrame(fullData)
@@ -115,7 +120,7 @@ def getFixations(fileName:str, upload_path:str=None)->None:
     pd.DataFrame(fixDf).to_csv(FIXATION_CSV, sep=',')
     return
 
-def openFullCSV():
+def outer_to_data_cell():
     """
     Creates a a csv file from the data cell of a broader csv file
     """
@@ -142,6 +147,4 @@ def upload_to_aws(local_file, bucket)->bool:
         return False
 
 readData("1st_Quad.csv")
-#upload_to_aws(OUTER_CSV,OFFICIAL_BUCKET)
-#openFullCSV()
 getFixations(CELL_CSV)
