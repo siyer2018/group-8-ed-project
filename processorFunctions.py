@@ -17,28 +17,6 @@ FIXATION_CSV: str = "Fixation_Points.csv" #replace with filename detection
 FIXATION_OFFSET: float = 0.2
 s3 = boto3.client('s3')
 
-def key_split(download_path:str)->tuple[str,str]:
-    """
-    Returns a tuple containing experience type and experience name
-    """
-
-    #split key into type and name
-    split_key: str = download_path.split("/")[-1]
-    split_key_list: list[str] = split_key.split("_")
-    exp_type: str = split_key_list[0]
-    exp_name: str = split_key_list[-1]
-    return exp_type, exp_name
-
-def updateBucket(download_path:str, upload_path:str)->None:
-    """
-    Calls relevant functions. Used for key in global scope
-    """
-    keyDetail: tuple[str, str] = key_split(download_path)#slice download_path
-    readData(download_path, upload_path)
-    getFixations(download_path, upload_path)
-    return
-
-
 def readCell(cell:str)->list[str]:
     """
     Returns list of integers from cell string
@@ -69,9 +47,9 @@ def readData(download_path:str, upload_path:str=None)->None:
     df=stripAndCombine(df, "Left + Right Blink", ["Left Blink", "Right Blink"])
     df=df[["Index","Fixation Point","Left + Right Blink"]]
     pd.DataFrame(df).to_csv(CELL_CSV,index=False)
-    fullData=[{"Data": df.to_csv(index=False,header=False), "Date": exp_date, "Exp Name": EXP_NAME}]
-    df=pd.DataFrame(fullData)
-    pd.DataFrame(df).to_csv(OUTER_CSV, index=False, sep=';')
+    # fullData=[{"Data": df.to_csv(index=False,header=False), "Date": exp_date, "Exp Name": EXP_NAME}]
+    # df=pd.DataFrame(fullData)
+    # pd.DataFrame(df).to_csv(OUTER_CSV, index=False, sep=';')
     return
 
 def getFixations(fileName:str, upload_path:str=None)->None:
